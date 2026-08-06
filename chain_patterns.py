@@ -3,7 +3,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chat_models import init_chat_model
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnableParallel , RunnableSequence , RunnableLambda , RunnablePassthrough
+from langchain_core.runnables import RunnableParallel , RunnableSequence , RunnableLambda , RunnablePassthrough , RunnableBranch
 
 load_dotenv()
 
@@ -85,11 +85,36 @@ def passthrough_chain():
     result = chain.invoke({"question":"What am I learning now"})
     print(f"Answer: {result}")
 
+def chain_branching():
+    series_prompt = ChatPromptTemplate.from_template("You are a TV shows expert. Help with: {input}")
+    movie_prompt = ChatPromptTemplate.from_template("You are a movie expert, Answer this {input}")
+    general_prompt = ChatPromptTemplate.from_template(
+        "If the sentence {input} is not about TV shows or movies, reply with 'can't help with this request'"
+    )
+
+    classifier_prompt = ChatPromptTemplate.from_template(
+        "Classify this as 'movie', 'TV show', or 'neither': {input}\n"
+        "Return only one word: 'movie', 'TV show', or 'neither'"
+    )
+    classifier_chain = classifier_prompt | model | StrOutputParser()
+
+    full_chain = (
+        RunnablePassthrough.assign(category=classifier_chain)
+        | RunnableBranch(
+            (lambda x: "movie" in x["category"].lower(), movie_prompt | model | StrOutputParser()),
+            (lambda x: "tv show" in x["category"].lower(), series_prompt | model | StrOutputParser()),
+            general_prompt | model | StrOutputParser(),
+        )
+    )
+    result = full_chain.invoke({"input":"Avengers infinity war"})
+    print(result)
+
 
 def main():
     # basic_chain()
     # parallel_chain()
-    passthrough_chain()
+    # passthrough_chain()
+    chain_branching()
 
 if __name__ == "__main__":
     main()
